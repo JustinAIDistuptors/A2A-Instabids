@@ -1,0 +1,17 @@
+# Core A2A Server & Client Dependencies
+fastapi
+uvicorn[standard]
+httpx
+pydantic
+
+# Google Agent Development Kit (Assuming it's installed separately or add path dependency if needed)
+# google-adk
+
+# Supabase Client
+supabase
+
+# Environment Variables
+python-dotenv
+
+# Logging
+logging
