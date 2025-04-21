@@ -10,6 +10,9 @@ pydantic
 # Supabase Client
 supabase
 
+# Google Cloud Services (Vision, potentially others later)
+google-cloud-vision
+
 # Environment Variables
 python-dotenv
 

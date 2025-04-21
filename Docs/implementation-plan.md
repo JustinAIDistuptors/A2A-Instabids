@@ -53,7 +53,23 @@ Build the system iteratively, focusing on establishing the core A2A communicatio
 3.  **Develop `MatchingAgent`:**
     *   **Goal:** Connect projects to contractors.
     *   **Action:** Implement matching logic (simple criteria initially, vector search later). Handle bundling.
-    *   **Reference:** Supabase vector search documentation.
+    *   **Action:** Implement multi-tiered matching logic:
+        *   Tier 1: Query registered contractors (`contractor_profiles`).
+        *   Tier 2: Query known prospects (`prospect_contractors` table - requires schema addition).
+        *   Tier 3: Integrate external search (e.g., Google Maps/Search tool) if needed based on urgency/target bids.
+    *   Implement logic to track bid progress for assigned projects (e.g., check `bids` table or listen for events) and potentially re-trigger searches or outreach based on urgency/timeline.
+    *   Handle project bundling logic.
+    *   **Output:** List of registered contractor IDs (for direct notification) and prospect/new lead contact info (to be passed to `OutreachAgent`).
+    *   **Reference:** Supabase documentation, Google Maps/Search API/Tool documentation.
+4.  **Develop `OutreachAgent`:**
+    *   **Goal:** Contact non-registered contractors identified by `MatchingAgent`.
+    *   **Action:** Define agent structure. Implement methods/tools for outreach via:
+        *   Email (using an email service/API).
+        *   SMS (using an SMS service/API).
+        *   Web Form Filling (using browser automation tool/library).
+    *   Receive tasks from `MatchingAgent` with contact info and project context.
+    *   Track outreach attempts and responses (potentially update `prospect_contractors` table).
+    *   **Location:** `src/agents/outreach/`
 
 **Phase 4: Communication & Security**
 
