@@ -35,6 +35,9 @@ from ...a2a_comm import client as a2a_client
 from . import utils as homeowner_utils
 from . import flows as homeowner_flows
 
+# Import PersistentMemory
+from ...memory.persistent_memory import PersistentMemory
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -145,10 +148,30 @@ class HomeownerAgent(AdkAgent):
         self.memory_service: Optional[Memory] = memory_service
         if not self.memory_service:
              try:
-                  self.memory_service = InMemoryMemory() # Use default in-memory implementation
-                  logger.info("Initialized default ADK InMemoryMemory service.")
+                  # Extract user_id from agent_id if available for persistent memory
+                  user_id = None
+                  if agent_info and agent_info.id and agent_info.id.startswith("homeowner-agent-"):
+                      parts = agent_info.id.split('-')
+                      if len(parts) >= 3:
+                          user_id = '-'.join(parts[2:])
+                          try:
+                              # Validate if it looks like a UUID
+                              uuid.UUID(user_id)
+                              logger.info(f"Extracted user ID from agent ID: {user_id}")
+                          except ValueError:
+                              logger.warning(f"Agent ID contains invalid UUID format: {agent_info.id}")
+                              user_id = None
+                              
+                  # Use PersistentMemory if we have a user_id and database, otherwise fallback to InMemory
+                  if user_id and self.db:
+                      self.memory_service = PersistentMemory(self.db, user_id)
+                      asyncio.create_task(self.memory_service.load())  # Start loading memory asynchronously
+                      logger.info(f"Initialized PersistentMemory for user {user_id}")
+                  else:
+                      self.memory_service = InMemoryMemory() # Use default in-memory implementation
+                      logger.info("Initialized default ADK InMemoryMemory service.")
              except Exception as e:
-                  logger.error(f"Failed to initialize default InMemoryMemory: {e}", exc_info=True)
+                  logger.error(f"Failed to initialize memory service: {e}", exc_info=True)
                   self.memory_service = None
         else:
              logger.info("Using injected ADK Memory service.")
@@ -174,6 +197,9 @@ class HomeownerAgent(AdkAgent):
         # Store active flows (keyed by TaskId, value is the LLMFlow instance state/context if needed)
         # Using a simple dict for now, might need more robust session management
         self._active_flow_sessions: Dict[TaskId, Dict] = {}
+        
+        # Flag to determine if we're using persistent memory
+        self._is_using_persistent_memory = isinstance(self.memory_service, PersistentMemory)
 
 
     async def handle_create_task(self, task: Task) -> None:
@@ -189,6 +215,10 @@ class HomeownerAgent(AdkAgent):
              homeowner_id = str(uuid.uuid4()) # Critical Placeholder!
 
         project_context = {"homeowner_id": homeowner_id}
+        
+        # Load user context from memory if available
+        user_context = await self._load_user_context(task)
+        project_context.update(user_context)
 
         # --- Analyze Initial Input ---
         try:
@@ -204,6 +234,15 @@ class HomeownerAgent(AdkAgent):
                 project_context.update(analysis_context)
             elif initial_input_type == "describe":
                 project_context['description'] = task.description
+                
+            # Record task creation in memory if using persistent memory
+            if self._is_using_persistent_memory and isinstance(self.memory_service, PersistentMemory):
+                await self.memory_service.add_interaction("task_creation", {
+                    "task_id": task.id,
+                    "input_type": initial_input_type,
+                    "description": task.description,
+                    "created_at": datetime.datetime.utcnow().isoformat()
+                })
         except Exception as e:
              logger.error(f"Error during initial analysis for task {task.id}: {e}", exc_info=True)
              await self._update_task_status(task.id, "FAILED", error_message="Initial analysis failed")
@@ -240,24 +279,53 @@ class HomeownerAgent(AdkAgent):
         return "describe"
 
 
+    async def _load_user_context(self, task: Task) -> Dict[str, Any]:
+        """Load user context from memory if available."""
+        user_id = task.metadata.get("user_id") if task.metadata else None
+        if not user_id or not self.memory_service or not self._is_using_persistent_memory:
+            return {}
+            
+        context = {}
+        
+        # Get preferences if memory is PersistentMemory
+        if isinstance(self.memory_service, PersistentMemory):
+            # Get preferences
+            preferences = self.memory_service.get_all_preferences()
+            if preferences:
+                context["user_preferences"] = preferences
+                
+            # Get recent projects
+            recent_projects = self.memory_service.get_recent_interactions("project_creation", limit=3)
+            if recent_projects:
+                context["recent_projects"] = recent_projects
+                
+            # Get communication style preference
+            communication_style = self.memory_service.get_preference("communication_style")
+            if communication_style:
+                context["communication_style"] = communication_style
+        
+        logger.info(f"Loaded user context for {user_id}: {list(context.keys())}")
+        return context
+
+
     async def _initiate_chat_flow(self, task_id: TaskId, initial_context: Dict, user_agent_id: AgentId):
         """Builds, stores, and starts the LLMFlow, sending the first prompt."""
-        logger.info(f"Task {task.id}: Initiating chat flow with context: {initial_context}")
+        logger.info(f"Task {task_id}: Initiating chat flow with context: {initial_context}")
         if not self.project_creation_flow or not self.llm_service: # Check if flow was built
              logger.error("Cannot start chat flow: Flow instance or LLM service missing.")
              await self._update_task_status(task_id, "FAILED", error_message="Configuration error: Flow/LLM missing")
              return
         if task_id in self._active_flow_sessions:
-             logger.warning(f"Task {task.id}: Flow session already active.")
+             logger.warning(f"Task {task_id}: Flow session already active.")
              # TODO: Handle re-entry (e.g., resend last prompt from memory)
              return
 
         try:
             # Store initial context for this flow session
             self._active_flow_sessions[task_id] = {"flow_state": None, "gathered_data": initial_context}
-            logger.info(f"Task {task.id}: Created and stored new flow session.")
+            logger.info(f"Task {task_id}: Created and stored new flow session.")
 
-            logger.info(f"Task {task.id}: Running initial step of LLMFlow.")
+            logger.info(f"Task {task_id}: Running initial step of LLMFlow.")
             # Pass initial context and potentially load memory state if resuming
             flow_input = FlowInput(initial_context=initial_context)
             # Use the pre-built flow instance
@@ -271,20 +339,20 @@ class HomeownerAgent(AdkAgent):
 
             if first_prompt:
                  await self._send_response_message(task_id, user_agent_id, first_prompt)
-                 logger.info(f"Task {task.id}: Initial prompt sent, awaiting user message.")
+                 logger.info(f"Task {task_id}: Initial prompt sent, awaiting user message.")
             elif result.is_done:
-                 logger.info(f"Flow for task {task.id} completed on initiation.")
+                 logger.info(f"Flow for task {task_id} completed on initiation.")
                  final_data = result.data or {}
                  final_data["homeowner_id"] = initial_context.get("homeowner_id")
                  await self._finalize_project_creation(task_id, final_data)
                  if task_id in self._active_flow_sessions: del self._active_flow_sessions[task_id] # Cleanup
             else:
-                 logger.error(f"Task {task.id}: Flow failed to generate initial prompt and is not done. State: {result.state}")
+                 logger.error(f"Task {task_id}: Flow failed to generate initial prompt and is not done. State: {result.state}")
                  if task_id in self._active_flow_sessions: del self._active_flow_sessions[task_id]
                  await self._update_task_status(task_id, "FAILED", error_message="Flow failed on initiation")
 
         except Exception as e:
-            logger.error(f"Error during chat flow initiation for task {task.id}: {e}", exc_info=True)
+            logger.error(f"Error during chat flow initiation for task {task_id}: {e}", exc_info=True)
             if task_id in self._active_flow_sessions: del self._active_flow_sessions[task_id]
             await self._update_task_status(task_id, "FAILED", error_message=f"Error initiating flow: {e}")
 
@@ -292,7 +360,7 @@ class HomeownerAgent(AdkAgent):
     async def _gather_details_form(self, task_id: TaskId, initial_context: Dict) -> Optional[Dict]:
         """Placeholder for structured/form-based detail gathering."""
         # (Implementation from previous step - kept for brevity)
-        logger.info(f"Task {task.id}: Simulating form data gathering with context: {initial_context}")
+        logger.info(f"Task {task_id}: Simulating form data gathering with context: {initial_context}")
         gathered_details = initial_context.copy()
         form_step_1_data = {"title": "Form Project Title", "description": "Details entered via form."}
         # ... (rest of simulation) ...
@@ -326,6 +394,16 @@ class HomeownerAgent(AdkAgent):
                 next_prompt = result.response
                 flow_is_done = result.is_done
                 final_data = result.data if flow_is_done else None
+                
+                # Record message interaction if using persistent memory
+                if self._is_using_persistent_memory and isinstance(self.memory_service, PersistentMemory):
+                    user_message_data = {
+                        "task_id": task_id,
+                        "message_id": message.id,
+                        "content": str(message.content),
+                        "timestamp": datetime.datetime.utcnow().isoformat()
+                    }
+                    await self.memory_service.add_interaction("user_message", user_message_data)
 
                 if flow_is_done:
                     logger.info(f"Flow for task {task_id} completed.")
@@ -337,8 +415,17 @@ class HomeownerAgent(AdkAgent):
                 elif next_prompt:
                     logger.info(f"Flow for task {task_id} generated next prompt.")
                     await self._send_response_message(task_id, message.sender_agent_id, next_prompt)
+                    
+                    # Record assistant response if using persistent memory
+                    if self._is_using_persistent_memory and isinstance(self.memory_service, PersistentMemory):
+                        assistant_message_data = {
+                            "task_id": task_id,
+                            "content": str(next_prompt),
+                            "timestamp": datetime.datetime.utcnow().isoformat()
+                        }
+                        await self.memory_service.add_interaction("assistant_message", assistant_message_data)
                 else:
-                    logger.error(f"Flow for task {task.id} is stuck or failed internally without finishing. State: {result.state}")
+                    logger.error(f"Flow for task {task_id} is stuck or failed internally without finishing. State: {result.state}")
                     if task_id in self._active_flow_sessions: del self._active_flow_sessions[task_id]
                     await self._update_task_status(task_id, "FAILED", error_message="Flow stalled unexpectedly")
 
@@ -354,22 +441,43 @@ class HomeownerAgent(AdkAgent):
         """Saves project and triggers next steps after flow completion."""
         if final_data:
              if "homeowner_id" not in final_data or not final_data["homeowner_id"]:
-                  logger.error(f"Task {task.id}: Cannot finalize project, homeowner_id is missing in final data.")
+                  logger.error(f"Task {task_id}: Cannot finalize project, homeowner_id is missing in final data.")
                   await self._update_task_status(task_id, "FAILED", error_message="Internal error: Missing homeowner ID")
                   return
 
              project_id = await homeowner_utils.save_project_to_db(self.db, final_data)
              if project_id:
-                  logger.info(f"Task {task.id}: Project saved from flow completion with ID {project_id}.")
+                  logger.info(f"Task {task_id}: Project saved from flow completion with ID {project_id}.")
+                  
+                  # Record project creation in persistent memory
+                  if self._is_using_persistent_memory and isinstance(self.memory_service, PersistentMemory):
+                      project_data = {
+                          "project_id": project_id,
+                          "title": final_data.get("title"),
+                          "category": final_data.get("category"),
+                          "project_type": final_data.get("project_type"),
+                          "created_at": datetime.datetime.utcnow().isoformat()
+                      }
+                      await self.memory_service.add_interaction("project_created", project_data)
+                      
+                      # Update preferences based on project
+                      if "project_type" in final_data:
+                          await self.memory_service._update_preference(
+                              "preferred_project_types", 
+                              final_data["project_type"],
+                              "project_creation"
+                          )
+                  
+                  # Trigger bid card creation
                   await homeowner_utils.trigger_bid_card_creation(
                        self.agent_info.id, task_id, project_id, final_data
                   )
                   await self._update_task_status(task_id, "COMPLETED", result={"project_id": project_id})
              else:
-                  logger.error(f"Task {task.id}: Failed to save project after flow completion.")
+                  logger.error(f"Task {task_id}: Failed to save project after flow completion.")
                   await self._update_task_status(task_id, "FAILED", error_message="Database save failed")
         else:
-             logger.warning(f"Task {task.id}: Flow completed but no final data provided.")
+             logger.warning(f"Task {task_id}: Flow completed but no final data provided.")
              await self._update_task_status(task_id, "FAILED", error_message="Flow completed without data")
 
 
@@ -459,49 +567,4 @@ class HomeownerAgent(AdkAgent):
     async def _update_task_status(self, task_id: TaskId, status: TaskStatus, result: Optional[Dict] = None, error_message: Optional[str] = None):
         """Updates task status in the database."""
         log_message = f"Task {task_id}: Status changed to {status}."
-        if result: log_message += f" Result: {result}"
-        if error_message: log_message += f" Error: {error_message}"
-        logger.info(log_message)
-
-        if not self.db:
-            logger.error(f"Cannot update task {task_id} status: DB client not available.")
-            return
-
-        update_data = {
-            "status": status,
-            "updated_at": datetime.datetime.utcnow().isoformat()
-        }
-        if status in ["COMPLETED", "FAILED", "CANCELLED"]:
-            update_data["completed_at"] = update_data["updated_at"]
-        if result:
-            try:
-                update_data["result"] = json.dumps(result)
-            except TypeError:
-                 logger.error(f"Task {task_id}: Result dictionary is not JSON serializable.")
-                 update_data["result"] = json.dumps({"error": "Result not serializable"})
-        if error_message:
-            update_data["error_message"] = error_message
-
-        try:
-            update_res = await self.db.table("tasks").update(update_data).eq("a2a_task_id", task_id).execute()
-            if update_res.data:
-                 logger.info(f"Successfully updated status for task {task_id} in DB.")
-            else:
-                 logger.warning(f"No task found with a2a_task_id '{task_id}' to update status.")
-        except Exception as e:
-            logger.error(f"Failed to update status for task {task_id} in DB: {e}", exc_info=True)
-
-
-    def get_agent_info(self) -> A2aAgentInfo:
-        """Returns the configuration/details of this agent."""
-        return self.agent_info
-
-# --- Agent Instantiation ---
-# This might live elsewhere (e.g., in the main server startup, requiring dependency injection)
-# homeowner_agent_instance = HomeownerAgent(
-#    supabase_client=...,
-#    llm_service=..., # Must provide configured ADK LLM
-#    vision_client=..., # Optional
-#    ocr_service=... # Optional
-#    memory_service=... # Optional
-# )
+        if result: log_message += f" Result:
