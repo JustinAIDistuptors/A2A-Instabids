@@ -567,4 +567,20 @@ class HomeownerAgent(AdkAgent):
     async def _update_task_status(self, task_id: TaskId, status: TaskStatus, result: Optional[Dict] = None, error_message: Optional[str] = None):
         """Updates task status in the database."""
         log_message = f"Task {task_id}: Status changed to {status}."
-        if result: log_message += f" Result:
+        if result: log_message += f" Result: {result}"
+        if error_message: log_message += f" Error: {error_message}"
+        logger.info(log_message)
+
+        if not self.db:
+            logger.error(f"Cannot update task {task_id} status: DB client not available.")
+            return
+
+        update_data = {
+            "status": status,
+            "updated_at": datetime.datetime.utcnow().isoformat()
+        }
+        if status in ["COMPLETED", "FAILED", "CANCELLED"]:
+            update_data["completed_at"] = update_data["updated_at"]
+        if result:
+            try:
+                update
