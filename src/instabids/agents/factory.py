@@ -1,15 +1,25 @@
+"""Agent singleton factory & cache."""
 from google.adk import LlmAgent, enable_tracing
-from instabids.tools.supabase import supabase_tools  # placeholder until Phase 1
+from instabids.tools import supabase_tools
+from instabids.agents.contractor import contractor_agent
 
-_homeowner_agent: LlmAgent | None = None
+enable_tracing("stdout")
+
+_homeowner: LlmAgent | None = None
 
 def get_homeowner_agent() -> LlmAgent:
-    global _homeowner_agent
-    if _homeowner_agent is None:
-        _homeowner_agent = LlmAgent(
+    global _homeowner
+    if _homeowner is None:
+        _homeowner = LlmAgent(
             name="HomeownerAgent",
             tools=[*supabase_tools],
-            system_prompt="You help homeowners collect and compare contractor bids."
+            system_prompt=(
+                "You help homeowners collect and compare contractor bids. "
+                "When you need to store or fetch data, call the appropriate Supabase tool."
+            ),
         )
-        enable_tracing("stdout")
-    return _homeowner_agent
+    return _homeowner
+
+def get_contractor_agent() -> LlmAgent:
+    """Currently returns a single dispatcher; later phases can load many."""
+    return contractor_agent
