@@ -24,12 +24,17 @@ dev = [
 [tool.hatch.metadata]
 allow-direct-references = true
 
-# Tell Hatchling where the source package lives (src-layout)
+# ---- Hatch build config (src-layout) ----
 [tool.hatch.build.targets.wheel]
 packages = ["src/instabids"]
 
 [tool.hatch.build.targets.sdist]
 packages = ["src/instabids"]
+
+# ---- Mypy: only type-check the new instabids package for now ----
+[tool.mypy]
+files = ["src/instabids"]
+strict = true
 
 [build-system]
 requires = ["hatchling>=1.24"]
