@@ -1,0 +1,37 @@
+openapi: 3.1.0
+info:
+  title: Instabids Supabase RPC API
+  version: "0.1.0"
+paths:
+  /rest/v1/rpc/create_bid:
+    post:
+      operationId: create_bid
+      summary: Insert a contractor bid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                project_id: {type: string}
+                contractor_id: {type: string}
+                amount: {type: number}
+      responses:
+        "200":
+          description: OK
+  /rest/v1/rpc/get_profile:
+    post:
+      operationId: get_profile
+      summary: Return contractor profile by id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                contractor_id: {type: string}
+      responses:
+        "200":
+          description: OK
