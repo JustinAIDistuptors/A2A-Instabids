@@ -1,4 +1,4 @@
-[project]
+[roject]
 name = "instabids"
 version = "0.1.0"
 description = "Multi-agent platform for homeowners to collect contractor bids"
