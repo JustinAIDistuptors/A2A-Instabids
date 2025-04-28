@@ -23,3 +23,20 @@ dev = [
 
 [tool.hatch.metadata]
 allow-direct-references = true
+
+# ---- Hatch build config (src-layout) ----
+[tool.hatch.build.targets.wheel]
+packages = ["src/instabids"]
+
+[tool.hatch.build.targets.sdist]
+packages = ["src/instabids"]
+
+# ---- Mypy: only type-check the new instabids package for now ----
+[tool.mypy]
+files = ["src/instabids"]
+ignore_missing_imports = true      # skip external libs without stubs
+disallow_untyped_defs = false      # allow the few un-annotated helpers for now
+
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
