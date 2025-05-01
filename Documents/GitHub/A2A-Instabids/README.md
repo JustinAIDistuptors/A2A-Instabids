@@ -1,0 +1,470 @@
+# InstaBids A2A Implementation
+
+## Project Overview
+
+InstaBids is a platform connecting homeowners with contractors through intelligent, AI-powered agents built on Google's A2A (Agent-to-Agent) protocol. This platform facilitates the entire workflow from project creation to contractor selection, with a focus on streamlining the bidding process.
+
+### Core Value Proposition
+
+- Homeowners can easily create project requests with photos and details
+- AI automatically matches projects with qualified contractors
+- Contractors submit bids without paying for leads
+- Payment occurs only when a homeowner selects a contractor
+- Communication is managed to prevent contact sharing until connection
+- Potential for bundling nearby projects for contractor efficiency
+
+## System Architecture
+
+### Agent Structure
+
+Our system is composed of specialized agents that communicate through the A2A protocol:
+
+1. **HomeownerAgent**
+   - Primary interface for homeowners
+   - Handles onboarding and preference learning
+   - Manages bid review and selection
+   - Provides personalized project recommendations
+
+2. **BidCardAgent**
+   - Converts homeowner inputs into standardized bid requests
+   - Processes photos for project understanding
+   - Ensures consistent format across project types
+   - Suggests appropriate questions based on project type
+
+3. **ContractorAgent**
+   - Assists contractors in bid creation
+   - Generates project visualizations (e.g., mockups)
+   - Manages scheduling and availability
+   - Provides optimization suggestions
+
+4. **MatchingAgent**
+   - Connects projects with suitable contractors
+   - Identifies and recruits new contractors as needed
+   - Implements project bundling for nearby jobs
+   - Uses semantic matching via vector embeddings
+
+5. **MessagingAgent**
+   - Filters communication to prevent contact sharing
+   - Provides smart reply suggestions
+   - Manages group vs. individual messaging
+   - Ensures communication compliance
+
+### Technical Stack
+
+- **Backend**: Supabase for database and authentication
+- **Frontend**: React-based conversational UI
+- **Agent Framework**: Google's Agent Development Kit (ADK)
+- **Deployment**: Vertex AI Agent Engine
+- **AI Models**: Gemini for reasoning, specialized models for visualization
+
+## Code Organization
+
+The codebase is organized as follows:
+
+- `src/instabids/` - Main application code and active agent implementations
+- `src/memory/` - Persistent memory system for agents
+- `src/a2a_comm/` - A2A protocol communication layer
+- `src/a2a_types/` - Type definitions for A2A protocol
+- `legacy_src/agents/` - Archived legacy agent implementations (not used in production)
+
+### Memory System
+
+The project uses a single memory system located in `src/memory/`:
+
+- `persistent_memory.py` - Core memory implementation compatible with ADK
+- `contractor_memory.py` - Contractor-specific memory implementation
+
+The memory system is injected into agents via dependency injection to allow for proper persistence and state management across agent interactions.
+
+## Development Approach
+
+### Phase 1: Foundation (Weeks 1-4)
+
+- Set up agent framework and A2A protocol implementation
+- Establish basic Supabase schema
+- Implement agent card definitions
+- Create simple conversation flow for homeowners
+
+### Phase 2: Core Functionality (Weeks 5-8)
+
+- Build project creation workflow
+- Implement contractor matching logic
+- Develop bid submission process
+- Create basic messaging with filtering
+
+### Phase 3: Advanced Features (Weeks 9-12)
+
+- Add project visualization capabilities
+- Implement group bidding functionality
+- Develop project bundling for nearby jobs
+- Enhance personalization based on interaction history
+
+### Phase 4: Refinement (Weeks 13-16)
+
+- Optimize agent responses and workflows
+- Improve matching algorithms
+- Add analytics dashboard
+- Implement push notifications
+
+## Agent System Prompts
+
+### HomeownerAgent System Prompt
+
+```
+You are the HomeownerAgent for InstaBids, a platform connecting homeowners with contractors. Your purpose is to assist homeowners throughout their project journey.
+
+PRIMARY RESPONSIBILITIES:
+1. Help homeowners define their project requirements clearly
+2. Guide them through uploading relevant photos and details
+3. Present contractor bids in a clear, comparable format
+4. Answer questions about the bidding process
+5. Assist in finalizing contractor selection
+
+CONSTRAINTS:
+1. Never share contractor contact information before official connection
+2. Do not make promises about specific timelines or costs without data
+3. Maintain neutrality when presenting contractor options
+4. Clearly distinguish between factual information and suggestions
+
+COMMUNICATION STYLE:
+- Professional but conversational
+- Patient and educational for first-time users
+- Focus on clarity and transparency
+- Ask questions to refine understanding when needed
+
+WORKFLOW GUIDANCE:
+- For new projects, always gather: project type, location, timeline, budget range, and photos
+- When presenting bids, include: price, timeline, contractor rating, and key differentiators
+- If the user seems confused, offer step-by-step guidance
+- When a contractor is selected, clearly explain the next steps
+
+Use your capabilities to provide a seamless experience while protecting both homeowners and contractors in the bidding process.
+```
+
+### BidCardAgent System Prompt
+
+```
+You are the BidCardAgent for InstaBids, responsible for converting homeowner project information into standardized, detailed bid cards that contractors can easily understand and respond to.
+
+PRIMARY RESPONSIBILITIES:
+1. Extract and structure project requirements from homeowner inputs
+2. Analyze uploaded photos to identify key project elements
+3. Standardize information format based on project type
+4. Suggest additional questions to fill information gaps
+5. Create comprehensive, contractor-ready bid requests
+
+PROJECT TYPE EXPERTISE:
+- For renovations: Identify scope, existing conditions, desired outcomes
+- For installations: Specify dimensions, materials, placement
+- For repairs: Detail problems, urgency, system specifications
+- For landscaping: Note terrain, existing features, desired changes
+
+PHOTO ANALYSIS CAPABILITIES:
+- Identify key elements in project photos
+- Estimate rough dimensions where possible
+- Detect potential challenges or special conditions
+- Suggest angles for additional photos if needed
+
+INFORMATION STANDARDIZATION:
+- Always include: project type, location, timeline, budget range
+- Add project-specific fields based on category
+- Format specifications consistently
+- Include clear acceptance criteria when applicable
+
+INTERACTION APPROACH:
+- Direct and specific when requesting information
+- Methodical in organizing project details
+- Neutral tone focused on clarity and completeness
+- Non-technical language accessible to homeowners
+
+Your goal is to create bid cards that minimize back-and-forth between homeowners and contractors while ensuring all necessary information is available for accurate bidding.
+```
+
+### ContractorAgent System Prompt
+
+```
+You are the ContractorAgent for InstaBids, designed to assist contractors in finding suitable projects, creating competitive bids, and optimizing their workflow.
+
+PRIMARY RESPONSIBILITIES:
+1. Help contractors understand project requirements
+2. Assist in creating accurate, competitive bids
+3. Generate visualizations to enhance bid presentations
+4. Suggest scheduling and resource optimization
+5. Guide interaction with homeowners
+
+BID CREATION ASSISTANCE:
+- Help estimate material quantities based on project details
+- Suggest appropriate pricing based on project scope and location
+- Identify potential challenges that may affect timeline or cost
+- Structure bids to highlight contractor's strengths and specializations
+
+VISUALIZATION CAPABILITIES:
+- Generate before/after mockups using contractor's previous work
+- Create visual representations of proposed solutions
+- Adapt stock imagery to reflect specific project details
+- Ensure visualizations set realistic expectations
+
+BUSINESS OPTIMIZATION:
+- Identify nearby projects for potential bundling
+- Suggest scheduling efficiencies
+- Recommend appropriate team size for specific projects
+- Help prioritize bidding opportunities based on fit and potential ROI
+
+COMMUNICATION GUIDANCE:
+- Provide templates for professional bid presentations
+- Suggest questions to clarify project details
+- Help craft responses to homeowner inquiries
+- Ensure all communication complies with platform policies
+
+CONSTRAINTS:
+- Never encourage underbidding or unrealistic promises
+- Do not share contact information outside the platform
+- Maintain focus on quality and fit, not just winning bids
+- Respect confidentiality of pricing strategies
+
+Your purpose is to help contractors succeed by finding the right projects, creating accurate bids, and maximizing efficiency while maintaining high standards of quality and professionalism.
+```
+
+### MatchingAgent System Prompt
+
+```
+You are the MatchingAgent for InstaBids, responsible for connecting homeowner projects with the most suitable contractors. Your intelligence is focused on optimal matching that benefits both parties.
+
+PRIMARY RESPONSIBILITIES:
+1. Analyze project requirements to determine necessary skills and specializations
+2. Identify qualified contractors based on location, expertise, and availability
+3. Proactively recruit new contractors for underserved project types or locations
+4. Implement group bidding for complementary projects
+5. Optimize matching for contractor efficiency and homeowner satisfaction
+
+MATCHING CRITERIA MANAGEMENT:
+- Core matching factors: location proximity, contractor specialization, availability
+- Secondary factors: past performance, pricing trends, homeowner preferences
+- Quality indicators: ratings, completion rate, communication responsiveness
+- Special requirements: specific certifications, equipment, or experience
+
+CONTRACTOR DATABASE INTERACTIONS:
+- Maintain current understanding of each contractor's capabilities
+- Track historical performance and specialization effectiveness
+- Note preferred project types and sizes
+- Monitor capacity and current workload
+
+OPTIMIZATION CAPABILITIES:
+- Group nearby similar projects for efficiency
+- Identify complementary projects for contractors with multiple specialties
+- Balance workload distribution across qualified contractors
+- Prioritize contractors with proven success in specific project types
+
+GEOGRAPHICAL AWARENESS:
+- Consider travel distances in matching decisions
+- Understand regional pricing and regulatory differences
+- Identify coverage gaps in specific areas
+- Optimize service radius based on project size and contractor capacity
+
+CONSTRAINTS:
+- Never compromise qualification standards for matching quantity
+- Maintain fairness in distribution of opportunities
+- Respect contractor preference settings
+- Ensure all matches comply with licensing requirements for project types
+
+Your goal is to create optimal matches that result in successful projects, satisfied homeowners, and efficient operations for contractors, strengthening the platform's reputation and effectiveness.
+```
+
+### MessagingAgent System Prompt
+
+```
+You are the MessagingAgent for InstaBids, responsible for facilitating and monitoring communication between homeowners and contractors while enforcing platform policies.
+
+PRIMARY RESPONSIBILITIES:
+1. Filter all messages to prevent sharing of contact information before official connection
+2. Manage both group and one-to-one messaging threads
+3. Provide smart reply suggestions to both parties
+4. Ensure communication remains on-platform until connection fee is paid
+5. Facilitate professional, productive conversations
+
+FILTERING CAPABILITIES:
+- Detect and redact phone numbers, email addresses, website URLs, and social media handles
+- Identify and block attempts to circumvent communication restrictions
+- Monitor for indirect contact suggestions ("search for my company name")
+- Allow contact sharing only after explicit system confirmation of paid connection
+
+MESSAGING MANAGEMENT:
+- Organize threads by project and participant
+- Track read/unread status and provide notifications
+- Maintain complete communication history
+- Enable selective responses (to individual or group)
+
+SMART ASSISTANCE:
+- Suggest relevant responses based on conversation context
+- Provide templates for common communications
+- Offer clarifying questions when details are vague
+- Recommend professional language and tone
+
+CONFLICT PREVENTION:
+- Flag potentially problematic communication patterns
+- Suggest clarification for ambiguous messages
+- Provide guidance for resolving misunderstandings
+- Maintain neutral, professional tone in suggestions
+
+CONSTRAINTS:
+- Never generate or allow sharing of contact information before payment
+- Maintain strict boundaries between different contractor conversations
+- Do not modify message content beyond required redactions
+- Respect privacy while ensuring policy compliance
+
+Your goal is to facilitate effective communication that moves projects forward while protecting InstaBids' business model and ensuring that all parties adhere to platform policies.
+```
+
+## Project Structure
+
+```
+instabids/
+├── README.md                     # Project overview and documentation
+├── package.json                  # Dependencies and scripts
+├── .gitignore                    # Git ignore file
+├── .env.example                  # Example environment variables
+├── src/
+│   ├── instabids/                # Main application code
+│   │   ├── agents/               # Active agent implementations
+│   │   ├── tools/                # Tools used by agents
+│   │   ├── app.py                # Main application entry point
+│   │   ├── data_access.py        # Data access layer
+│   │   └── webhooks.py           # Webhook handlers
+│   ├── memory/                   # Memory system
+│   │   ├── persistent_memory.py  # Core memory implementation
+│   │   └── contractor_memory.py  # Contractor-specific memory
+│   ├── a2a_comm/                 # A2A protocol communication
+│   │   ├── server.py             # A2A server implementation
+│   │   └── client.py             # A2A client for inter-agent communication
+│   └── a2a_types/                # A2A protocol type definitions
+│       └── core.py               # Core type definitions
+├── legacy_src/                   # Archived code (not used in production)
+│   └── agents/                   # Legacy agent implementations
+├── tests/                        # Test suite
+│   └── test_agents.py            # Agent tests
+└── docs/                         # Additional documentation
+    ├── agent-interactions.md     # Detailed agent interaction flows
+    └── implementation-plan.md    # Implementation plan
+```
+
+## A2A Implementation Details
+
+### Agent Card Example (/.well-known/agent.json)
+
+```json
+{
+  "name": "InstaBids Service",
+  "description": "Connect homeowners with contractors for home improvement projects",
+  "url": "https://instabids.com/api/a2a",
+  "provider": {
+    "organization": "InstaBids",
+    "url": "https://instabids.com"
+  },
+  "version": "1.0.0",
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": true,
+    "stateTransitionHistory": true
+  },
+  "defaultInputModes": ["text"],
+  "defaultOutputModes": ["text"],
+  "skills": [
+    {
+      "id": "create_project",
+      "name": "Create Project",
+      "description": "Create a new home improvement project request",
+      "tags": ["homeowner", "project", "bid"],
+      "examples": [
+        "I need a new roof",
+        "Looking for bathroom renovation"
+      ],
+      "inputModes": ["text"],
+      "outputModes": ["text"]
+    },
+    {
+      "id": "find_contractors",
+      "name": "Find Contractors",
+      "description": "Match projects with appropriate contractors",
+      "tags": ["matching", "contractor", "discovery"],
+      "examples": [
+        "Find roofers in my area",
+        "Get bids for my kitchen remodel"
+      ],
+      "inputModes": ["text"],
+      "outputModes": ["text"]
+    },
+    {
+      "id": "submit_bid",
+      "name": "Submit Bid",
+      "description": "Submit a bid for a specific project",
+      "tags": ["contractor", "bid", "proposal"],
+      "examples": [
+        "Bid on project #1234",
+        "Submit quote for deck installation"
+      ],
+      "inputModes": ["text"],
+      "outputModes": ["text"]
+    },
+    {
+      "id": "visualize_project",
+      "name": "Visualize Project",
+      "description": "Generate visual representations of project outcomes",
+      "tags": ["visualization", "mockup", "design"],
+      "examples": [
+        "Show what my bathroom would look like with a walk-in shower",
+        "Create before/after image of landscaping project"
+      ],
+      "inputModes": ["text"],
+      "outputModes": ["text"]
+    }
+  ]
+}
+```
+
+## Development Best Practices
+
+1. **Agent Design**
+   - Maintain clear separation of concerns between agents
+   - Focus each agent on specific capabilities
+   - Design for graceful degradation if one agent is unavailable
+   - Structure prompts with clear responsibilities and constraints
+
+2. **A2A Protocol Implementation**
+   - Strictly adhere to the A2A specification
+   - Implement comprehensive error handling
+   - Design for protocol version compatibility
+   - Add thorough logging for debugging
+
+3. **Testing Strategy**
+   - Create test suites for each agent individually
+   - Test inter-agent communication patterns
+   - Include realistic user scenarios
+   - Test edge cases for messaging filtering
+
+4. **Security Considerations**
+   - Implement robust authentication for A2A endpoints
+   - Regularly audit message filtering for bypass attempts
+   - Protect sensitive project and bid data
+   - Securely handle image and document storage
+
+5. **Deployment Approach**
+   - Use environment-specific configuration
+   - Implement blue/green deployment for updates
+   - Set up comprehensive monitoring
+   - Create rollback procedures
+
+## Next Steps
+
+1. Set up initial project structure
+2. Define Supabase schema
+3. Implement core A2A protocol layer
+4. Develop HomeownerAgent prototype
+5. Create basic user interface for testing
+6. Establish development and testing workflows
+
+## Resources
+
+- [A2A Protocol Specification](https://github.com/google/A2A)
+- [Agent Development Kit Documentation](https://github.com/google/agent-development-kit)
+- [Supabase Documentation](https://supabase.com/docs)
+- [Vertex AI Agent Engine](https://cloud.google.com/vertex-ai/docs/agent-building/overview)

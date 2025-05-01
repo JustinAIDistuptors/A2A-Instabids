@@ -1,0 +1,42 @@
+[project]
+name = "instabids"
+version = "0.1.0"
+description = "Multi-agent platform for homeowners to collect contractor bids"
+authors = [{name = "Justin", email = "justin@example.com"}]
+requires-python = ">=3.10"
+
+dependencies = [
+  "fastapi>=0.110.0",
+  "uvicorn[standard]>=0.29.0",
+  "supabase>=2.3.1",
+  "google-adk>=0.2.0",
+  "pgvector>=0.2.6",
+  "openai>=1.25.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.4.2",
+  "mypy>=1.15.0",
+  "pytest>=8.1.0",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+# ---- Hatch build config (src-layout) ----
+[tool.hatch.build.targets.wheel]
+packages = ["src/instabids"]
+
+[tool.hatch.build.targets.sdist]
+packages = ["src/instabids"]
+
+# ---- Mypy: only type-check the new instabids package for now ----
+[tool.mypy]
+files = ["src/instabids"]
+ignore_missing_imports = true      # skip external libs without stubs
+disallow_untyped_defs = false      # allow the few un-annotated helpers for now
+
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"

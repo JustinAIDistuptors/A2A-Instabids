@@ -1,0 +1,6 @@
+[submodule "knowledge-bases/A2A"]
+	path = knowledge-bases/A2A
+	url = https://github.com/JustinAIDistuptors/A2A.git
+[submodule "knowledge-bases/adk-python"]
+	path = knowledge-bases/adk-python
+	url = https://github.com/JustinAIDistuptors/adk-python.git
