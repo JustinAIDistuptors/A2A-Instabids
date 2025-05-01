@@ -1,30 +1,22 @@
 """Agent singleton factory & cache."""
-
-from google.adk import Agent
+from google.adk import LlmAgent, enable_tracing
 from instabids.tools import supabase_tools
 from instabids.agents.contractor import create_contractor_agent
 from memory.persistent_memory import PersistentMemory
+from .homeowner_agent import HomeownerAgent  # ← new import
 
-# Tracing is now configured differently in newer versions of google.adk
-# enable_tracing("stdout")
+enable_tracing("stdout")
 
-_homeowner: Agent | None = None
-_contractor: Agent | None = None
+_mem_store = PersistentMemory()
+_homeowner_instance: HomeownerAgent | None = None
 
 
-def get_homeowner_agent(memory: PersistentMemory = None) -> Agent:
-    global _homeowner
-    if _homeowner is None:
-        _homeowner = Agent(
-            name="HomeownerAgent",
-            tools=[*supabase_tools],
-            system_prompt=(
-                "You help homeowners collect and compare contractor bids. "
-                "When you need to store or fetch data, call the appropriate Supabase tool."
-            ),
-            memory=memory,
-        )
-    return _homeowner
+def get_homeowner_agent(memory: PersistentMemory | None = None) -> LlmAgent:  # noqa: D401
+    """Return singleton HomeownerAgent."""
+    global _homeowner_instance
+    if _homeowner_instance is None:
+        _homeowner_instance = HomeownerAgent(memory or _mem_store)
+    return _homeowner_instance
 
 
 def get_contractor_agent(memory: PersistentMemory = None) -> Agent:
